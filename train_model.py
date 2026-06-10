@@ -1,91 +1,86 @@
-# train_model.py
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import LabelEncoder
 import pickle
-import os
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
 
-print("=" * 60)
-print("🐱 ОБУЧЕНИЕ МОДЕЛИ ДЛЯ КОШЕК")
-print("=" * 60)
+# 1️⃣ ЗАГРУЗКА ДАННЫХ
+df = pd.read_csv("cat_2.csv", sep=';')
 
-# 1. Загружаем данные
-print("\n1. Загрузка данных...")
-df = pd.read_csv('cat_2.csv', sep=';')
-print(f"   Загружено {len(df)} записей")
+# 2️⃣ ПРИВЕДЕНИЕ НАЗВАНИЙ КОЛОНОК К СТАНДАРТУ APP.PY
+# Переименовываем колонки из CSV в понятные названия
+rename_dict = {
+    "возраст": "Age",
+    "вес": "Weight",
+    "играет (мин.)": "Play Minutes",
+    "спит (часы)": "Sleep Hours",
+    "порода": "Breed",
+    "пол": "Gender",
+    "сетрелизация": "Fixed",
+    "цвета": "Color",
+    "гуляет или нет": "Outdoor",
+    "еда": "Food",
+    "страна": "Country"
+}
+df = df.rename(columns=rename_dict)
 
-# 2. Создаем целевую переменную Healthy
-print("\n2. Создание целевой переменной...")
-
+# 3️⃣ ПОДГОТОВКА ДАННЫХ
+# Создаем целевую переменную 'Healthy' на основе критериев здоровья кошки
 def is_healthy(row):
-    """Определяет, здорова ли кошка"""
     problems = 0
-    
-    # Если кошка старая (> 15 лет) - проблемы
-    if row['возраст'] > 15:
+    if row['Age'] > 15:
         problems += 1
-    
-    # Если вес слишком маленький или большой
-    if row['вес'] < 2 or row['вес'] > 8:
+    if row['Weight'] < 2 or row['Weight'] > 8:
         problems += 1
-    
-    # Если мало играет (< 20 минут)
-    if row['играет (мин.)'] < 20:
+    if row['Play Minutes'] < 20:
         problems += 1
-    
-    # Если слишком много или мало спит
-    if row['спит (часы)'] < 10 or row['спит (часы)'] > 20:
+    if row['Sleep Hours'] < 10 or row['Sleep Hours'] > 20:
         problems += 1
-    
     return 'No' if problems >= 2 else 'Yes'
 
-df['Healthy'] = df.apply(is_healthy, axis=1)
+df["Healthy"] = df.apply(is_healthy, axis=1)
+y = df["Healthy"]  # Это то, что будем предсказывать
 
-print(f"   Здоровые (Yes): {sum(df['Healthy'] == 'Yes')}")
-print(f"   Не здоровые (No): {sum(df['Healthy'] == 'No')}")
-
-# 3. Выбираем признаки
-print("\n3. Подготовка признаков...")
-feature_columns = ['возраст', 'вес', 'играет (мин.)', 'спит (часы)']
+# Выбираем признаки (названия СТРОГО СОВПАДАЮТ с app.py)
+feature_columns = [
+    "Age",
+    "Weight",
+    "Play Minutes",
+    "Sleep Hours"
+]
 X = df[feature_columns]
-y = df['Healthy']
 
-# Заполняем возможные пропуски
+# Заполняем пропуски в данных средними значениями
 X = X.fillna(X.mean())
-print(f"   Признаки: {feature_columns}")
 
-# 4. Кодируем целевую переменную
-print("\n4. Кодирование...")
+print(f"Распределение Healthy:\n{df['Healthy'].value_counts()}")
+
+# 4️⃣ КОДИРОВАНИЕ
+# Превращаем 'Yes'/'No' в 1/0 для математических расчетов
 le = LabelEncoder()
-y_encoded = le.fit_transform(y)
+y_encoded = le.fit_transform(y)  # 'Yes' -> 1, 'No' -> 0
 
-# 5. Обучаем модель
-print("\n5. Обучение модели...")
+# 5️⃣ ОБУЧЕНИЕ МОДЕЛИ
+# Разделяем данные на обучающую и тестовую части
 X_train, X_test, y_train, y_test = train_test_split(
     X, y_encoded, test_size=0.2, random_state=42
 )
 
+# Создаем и обучаем модель (Random Forest)
 model = RandomForestClassifier(n_estimators=100, random_state=42)
-model.fit(X_train, y_train)
+model.fit(X_train, y_train)  # Здесь происходит само обучение!
 
-# Оценка
-accuracy = model.score(X_test, y_test)
-print(f"   Точность модели: {accuracy:.2f}")
+# Проверяем качество модели
+print(f"Модель обучена. Точность на тесте: {model.score(X_test, y_test):.2f}")
 
-# 6. Сохраняем модель
-print("\n6. Сохранение модели...")
-with open('dog_health_model.pkl', 'wb') as f:
+# Дополнительно: важность признаков
+print("\nВажность признаков:")
+for col, imp in zip(feature_columns, model.feature_importances_):
+    print(f"  {col}: {imp:.3f}")
+
+# 6️⃣ СОХРАНЕНИЕ МОДЕЛИ
+# Сохраняем модель, кодировщик и список колонок в файл для последующего использования
+with open("dog_health_model.pkl", "wb") as f:
     pickle.dump((model, le, feature_columns), f)
 
-# Проверяем, создался ли файл
-if os.path.exists('dog_health_model.pkl'):
-    size = os.path.getsize('dog_health_model.pkl')
-    print(f"   ✅ Модель сохранена! (файл: {size} байт)")
-    print(f"   📁 Путь: {os.path.abspath('dog_health_model.pkl')}")
-else:
-    print("   ❌ Ошибка: файл не создан!")
-
-print("\n" + "=" * 60)
-print("✅ ГОТОВО! Теперь запустите: streamlit run app.py")
-print("=" * 60)
+print("\nМодель сохранена в файл 'dog_health_model.pkl'")
