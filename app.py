@@ -1,9 +1,9 @@
 # app.py
 import streamlit as st
 import pandas as pd
-import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
+import numpy as np
 
 # --- НАСТРОЙКА СТРАНИЦЫ ---
 st.set_page_config(page_title="Cat Health Predictor", layout="wide")
@@ -19,13 +19,13 @@ def load_data():
 # --- ФУНКЦИЯ ДЛЯ ОПРЕДЕЛЕНИЯ ЗДОРОВЬЯ ---
 def is_healthy(row):
     problems = 0
-    if row['возраст'] > 15:
+    if row['Age'] > 15:
         problems += 1
-    if row['вес'] < 2 or row['вес'] > 8:
+    if row['Weight'] < 2 or row['Weight'] > 8:
         problems += 1
-    if row['играет (мин.)'] < 20:
+    if row['Playing (min.)'] < 20:
         problems += 1
-    if row['спит (часы)'] < 10 or row['спит (часы)'] > 20:
+    if row['Sleeps (hours)'] < 10 or row['Sleeps (hours)'] > 20:
         problems += 1
     return 'Yes' if problems < 2 else 'No'
 
@@ -38,7 +38,7 @@ def get_model():
     df['Healthy'] = df.apply(is_healthy, axis=1)
     
     # Признаки
-    feature_cols = ['возраст', 'вес', 'играет (мин.)', 'спит (часы)']
+    feature_cols = ['Age', 'Weight', 'Playing (min.)', 'Sleeps (hours)']
     X = df[feature_cols].fillna(df[feature_cols].mean())
     y = df['Healthy']
     
@@ -52,7 +52,7 @@ def get_model():
     
     return model, le, feature_cols
 
-# --- ОСНОВНАЯ ЛОГИКА ПРИЛОЖЕНИЯ ---
+# --- ОСНОВНАЯ ЛОГИКА ---
 try:
     # Загружаем данные
     df = load_data()
@@ -61,107 +61,118 @@ try:
     model, label_encoder, feature_cols = get_model()
     
     # Добавляем статус здоровья для отображения
-    df['Статус'] = df.apply(is_healthy, axis=1).map({'Yes': 'Здорова', 'No': 'Требует внимания'})
+    df['Health Status'] = df.apply(is_healthy, axis=1).map({'Yes': 'Healthy', 'No': 'Needs Attention'})
     
     # --- БОКОВАЯ ПАНЕЛЬ ---
-    st.sidebar.header("🔧 Панель управления")
+    st.sidebar.header("🔧 Filters")
     
-    # Фильтр по породе
+    # Filter by breed
     breeds = st.sidebar.multiselect(
-        "Выберите породы:",
-        options=sorted(df['порода'].unique()),
+        "Select breeds:",
+        options=sorted(df['Breed'].unique()),
         default=[]
     )
     
-    # Фильтр по весу
-    min_w = float(df['вес'].min())
-    max_w = float(df['вес'].max())
+    # Filter by weight
+    min_w = float(df['Weight'].min())
+    max_w = float(df['Weight'].max())
     weight_range = st.sidebar.slider(
-        "Диапазон веса (кг):",
+        "Weight range (kg):",
         min_value=min_w,
         max_value=max_w,
         value=(min_w, max_w)
     )
     
-    # Фильтр по цвету
+    # Filter by color
     colors = st.sidebar.multiselect(
-        "Цвет шерсти:",
-        options=sorted(df['цвета'].unique()),
+        "Color:",
+        options=sorted(df['Color'].unique()),
         default=[]
     )
     
-    # Чекбокс "только здоровые"
-    only_healthy = st.sidebar.checkbox("Показать только здоровых кошек")
-    
-    # Тип графика
-    plot_type = st.sidebar.radio(
-        "Тип графика:",
-        ["Гистограмма пород", "Средний вес по породам"]
+    # Filter by gender
+    gender_filter = st.sidebar.selectbox(
+        "Gender:",
+        options=["All", "female", "male"]
     )
     
-    # Применяем фильтры
+    # Checkbox for healthy only
+    only_healthy = st.sidebar.checkbox("Show only healthy cats")
+    
+    # Plot type
+    plot_type = st.sidebar.radio(
+        "Chart type:",
+        ["Breed distribution", "Average weight by breed", "Activity by breed"]
+    )
+    
+    # Apply filters
     filtered_df = df.copy()
     if breeds:
-        filtered_df = filtered_df[filtered_df['порода'].isin(breeds)]
-    filtered_df = filtered_df[(filtered_df['вес'] >= weight_range[0]) & (filtered_df['вес'] <= weight_range[1])]
+        filtered_df = filtered_df[filtered_df['Breed'].isin(breeds)]
+    filtered_df = filtered_df[(filtered_df['Weight'] >= weight_range[0]) & (filtered_df['Weight'] <= weight_range[1])]
     if colors:
-        filtered_df = filtered_df[filtered_df['цвета'].isin(colors)]
+        filtered_df = filtered_df[filtered_df['Color'].isin(colors)]
+    if gender_filter != "All":
+        filtered_df = filtered_df[filtered_df['Gender'] == gender_filter]
     if only_healthy:
-        filtered_df = filtered_df[filtered_df['Статус'] == 'Здорова']
+        filtered_df = filtered_df[filtered_df['Health Status'] == 'Healthy']
     
-    # --- ОСНОВНАЯ ОБЛАСТЬ ---
-    st.header("📊 Исходные данные")
-    st.info(f"Показано записей: {len(filtered_df)} из {len(df)}")
+    # --- MAIN AREA ---
+    st.header("📊 Data Overview")
+    st.info(f"Showing: {len(filtered_df)} of {len(df)} records")
     st.dataframe(filtered_df, use_container_width=True)
     
-    # --- ВИЗУАЛИЗАЦИЯ ---
-    st.header("📈 Визуализация")
-    if plot_type == "Гистограмма пород":
-        data = filtered_df['порода'].value_counts()
+    # --- VISUALIZATION ---
+    st.header("📈 Charts")
+    if plot_type == "Breed distribution":
+        data = filtered_df['Breed'].value_counts()
+        st.bar_chart(data)
+    elif plot_type == "Average weight by breed":
+        data = filtered_df.groupby('Breed')['Weight'].mean().sort_values(ascending=False)
         st.bar_chart(data)
     else:
-        data = filtered_df.groupby('порода')['вес'].mean().sort_values(ascending=False)
+        data = filtered_df.groupby('Breed')['Playing (min.)'].mean().sort_values(ascending=False)
         st.bar_chart(data)
     
-    # --- ПРОГНОЗИРОВАНИЕ ---
-    st.header("🤖 Прогнозирование здоровья кошки")
-    st.markdown("Введите данные о кошке:")
+    # --- PREDICTION ---
+    st.header("🤖 Predict Cat Health")
+    st.markdown("Enter your cat's data:")
     
     col1, col2 = st.columns(2)
     with col1:
-        age = st.number_input("Возраст (лет)", min_value=0.0, max_value=30.0, value=3.0)
-        weight = st.number_input("Вес (кг)", min_value=1.0, max_value=15.0, value=4.0)
+        age = st.number_input("Age (years)", min_value=0.0, max_value=30.0, value=3.0)
+        weight = st.number_input("Weight (kg)", min_value=1.0, max_value=15.0, value=4.0)
     with col2:
-        play_mins = st.number_input("Время игр (минут в день)", min_value=0, max_value=120, value=30)
-        sleep_hrs = st.number_input("Часы сна в день", min_value=5.0, max_value=24.0, value=14.0)
+        play_mins = st.number_input("Playing time (min/day)", min_value=0, max_value=120, value=30)
+        sleep_hrs = st.number_input("Sleep hours per day", min_value=5.0, max_value=24.0, value=14.0)
     
-    if st.button("🔮 Предсказать здоровье", type="primary"):
+    if st.button("🔮 Predict Health", type="primary"):
         input_data = pd.DataFrame([[age, weight, play_mins, sleep_hrs]], columns=feature_cols)
         prediction = model.predict(input_data)[0]
         prob = model.predict_proba(input_data)[0]
         result = label_encoder.inverse_transform([prediction])[0]
         
-        st.subheader("Результат прогноза:")
+        st.subheader("Prediction Result:")
         if result == "Yes":
-            st.success(f"✅ Кошка ЗДОРОВА! (вероятность: {prob[1]*100:.1f}%)")
+            st.success(f"✅ Cat is HEALTHY! (Probability: {prob[1]*100:.1f}%)")
             st.balloons()
         else:
-            st.error(f"⚠️ Кошка требует внимания! (вероятность проблем: {prob[0]*100:.1f}%)")
+            st.error(f"⚠️ Cat needs ATTENTION! (Risk probability: {prob[0]*100:.1f}%)")
     
-    # --- СТАТИСТИКА ---
+    # --- STATISTICS ---
     st.markdown("---")
-    st.markdown("### 📊 Статистика")
+    st.markdown("### 📊 Statistics")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Всего кошек", len(df))
+        st.metric("Total cats", len(df))
     with col2:
-        st.metric("Пород", df['порода'].nunique())
+        st.metric("Breeds", df['Breed'].nunique())
     with col3:
-        st.metric("Средний вес", f"{df['вес'].mean():.1f} кг")
+        st.metric("Average weight", f"{df['Weight'].mean():.1f} kg")
     with col4:
-        healthy_count = sum(df['Статус'] == 'Здорова')
-        st.metric("Здоровых", f"{healthy_count} ({healthy_count/len(df)*100:.0f}%)")
+        healthy_count = sum(df['Health Status'] == 'Healthy')
+        st.metric("Healthy cats", f"{healthy_count} ({healthy_count/len(df)*100:.0f}%)")
 
 except Exception as e:
-    st.error(f"Ошибка: {e}")
-    st.info("Проверьте, что файл 'cat_2.csv' находится в той же папке")
+    st.error(f"Error: {e}")
+    st.info("Make sure 'cat_2.csv' is in the same folder")
